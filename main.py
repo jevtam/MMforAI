@@ -10,10 +10,6 @@ NAMESPACE = {
 
 
 def read_shared_strings(zip_file):
-    """
-    Читает xl/sharedStrings.xml, где Excel хранит строковые значения.
-    Возвращает список строк.
-    """
     shared_strings = []
 
     try:
@@ -33,10 +29,6 @@ def read_shared_strings(zip_file):
 
 
 def get_sheet_path(zip_file):
-    """
-    Находит путь к первому листу Excel-файла.
-    В твоем случае это лист loans_demo.
-    """
     workbook_xml = ET.fromstring(zip_file.read("xl/workbook.xml"))
     workbook_rels_xml = ET.fromstring(zip_file.read("xl/_rels/workbook.xml.rels"))
 
@@ -61,9 +53,6 @@ def get_sheet_path(zip_file):
 
 
 def cell_value(cell, shared_strings):
-    """
-    Преобразует значение ячейки Excel в обычное Python-значение.
-    """
     cell_type = cell.attrib.get("t")
     value_node = cell.find("main:v", NAMESPACE)
 
@@ -79,9 +68,6 @@ def cell_value(cell, shared_strings):
 
 
 def column_letters(cell_ref):
-    """
-    Из адреса ячейки вроде A12 или BC7 достает буквенную часть: A, BC и т.д.
-    """
     letters = []
     for char in cell_ref:
         if char.isalpha():
@@ -92,10 +78,6 @@ def column_letters(cell_ref):
 
 
 def excel_column_to_index(column_name):
-    """
-    Переводит Excel-столбец в индекс:
-    A -> 0, B -> 1, ..., Z -> 25, AA -> 26
-    """
     result = 0
     for char in column_name:
         result = result * 26 + (ord(char.upper()) - ord("A") + 1)
@@ -103,11 +85,6 @@ def excel_column_to_index(column_name):
 
 
 def read_xlsx_as_table(file_path):
-    """
-    Читает .xlsx и возвращает:
-    - headers: список заголовков
-    - records: список словарей
-    """
     with zipfile.ZipFile(file_path, "r") as zip_file:
         shared_strings = read_shared_strings(zip_file)
         sheet_path = get_sheet_path(zip_file)
