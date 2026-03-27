@@ -1,264 +1,187 @@
-#НОМЕР 1
-film = input()
-cinema = input()
-time = input()
+import zipfile
+import xml.etree.ElementTree as ET
+import csv
 
-print(f'Билет на «{film}» в «{cinema}» на {time} забронирован.')
 
-#НОМЕР 2
-stringa1 = input()
-stringa2 = input()
+NAMESPACE = {
+    "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "rel": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+}
 
-if stringa1 in ("да", "нет") and stringa2 in ("да", "нет"):
-    print("ВЕРНО")
-else:
-    print("НЕВЕРНО")
 
-#НОМЕР 3
-login = input()
-email = input()
+def read_shared_strings(zip_file):
+    """
+    Читает xl/sharedStrings.xml, где Excel хранит строковые значения.
+    Возвращает список строк.
+    """
+    shared_strings = []
 
-if "@" not in login and "@" in email:
-    print("OK")
-else:
-    print("ERROR")
+    try:
+        xml_data = zip_file.read("xl/sharedStrings.xml")
+    except KeyError:
+        return shared_strings
 
-#НОМЕР 4
-count = 0
-heights = []
+    root = ET.fromstring(xml_data)
 
-while True:
-    s = input()
-    if s == "!":
-        break
-    h = int(s)
-    if 150 <= h <= 190:
-        heights.append(h)
-        count += 1
+    for si in root.findall("main:si", NAMESPACE):
+        parts = []
+        for text_node in si.iterfind(".//main:t", NAMESPACE):
+            parts.append(text_node.text or "")
+        shared_strings.append("".join(parts))
 
-print(count)
-print(min(heights), max(heights))
+    return shared_strings
 
-#НОМЕР 5
-while True:
-    p1 = input()
-    p2 = input()
 
-    if len(p1) < 8:
-        print("Короткий!")
-    elif "123" in p1:
-        print("Простой!")
-    elif p1 != p2:
-        print("Различаются.")
-    else:
-        print("OK")
-        break
+def get_sheet_path(zip_file):
+    """
+    Находит путь к первому листу Excel-файла.
+    В твоем случае это лист loans_demo.
+    """
+    workbook_xml = ET.fromstring(zip_file.read("xl/workbook.xml"))
+    workbook_rels_xml = ET.fromstring(zip_file.read("xl/_rels/workbook.xml.rels"))
 
-#НОМЕР 6
-n = int(input())
+    rels_map = {}
+    for rel in workbook_rels_xml:
+        rel_id = rel.attrib.get("Id")
+        target = rel.attrib.get("Target")
+        if rel_id and target:
+            rels_map[rel_id] = target
 
-for i in range(n):
-    print("*" * (2 * i + 1))
+    sheets = workbook_xml.find("main:sheets", NAMESPACE)
+    first_sheet = sheets[0]
 
-#НОМЕР 7
-n = int(input())
+    rel_id = first_sheet.attrib.get(
+        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    )
 
-num = 1
-row = 1
+    if rel_id not in rels_map:
+        raise ValueError("Не удалось найти путь к листу Excel.")
 
-while num <= n:
-    for _ in range(row):
-        if num > n:
+    return "xl/" + rels_map[rel_id]
+
+
+def cell_value(cell, shared_strings):
+    """
+    Преобразует значение ячейки Excel в обычное Python-значение.
+    """
+    cell_type = cell.attrib.get("t")
+    value_node = cell.find("main:v", NAMESPACE)
+
+    if value_node is None:
+        return ""
+
+    raw_value = value_node.text
+
+    if cell_type == "s":
+        return shared_strings[int(raw_value)]
+
+    return raw_value
+
+
+def column_letters(cell_ref):
+    """
+    Из адреса ячейки вроде A12 или BC7 достает буквенную часть: A, BC и т.д.
+    """
+    letters = []
+    for char in cell_ref:
+        if char.isalpha():
+            letters.append(char)
+        else:
             break
-        print(num, end=" ")
-        num += 1
-    print()
-    row += 1
+    return "".join(letters)
 
-#НОМЕР 8
-s = input()
 
-print(s[2])
-print(s[-2])
-print(s[:5])
-print(s[:-2])
-print(s[::2])
-print(s[1::2])
-print(s[::-1])
-print(s[::-2])
-print(len(s))
+def excel_column_to_index(column_name):
+    """
+    Переводит Excel-столбец в индекс:
+    A -> 0, B -> 1, ..., Z -> 25, AA -> 26
+    """
+    result = 0
+    for char in column_name:
+        result = result * 26 + (ord(char.upper()) - ord("A") + 1)
+    return result - 1
 
-#НОМЕР 9
-s = input()
 
-if "f" in s:
-    if s.count("f") == 1:
-        print(s.index("f"))
-    else:
-        print(s.index("f"), s.rindex("f"))
+def read_xlsx_as_table(file_path):
+    """
+    Читает .xlsx и возвращает:
+    - headers: список заголовков
+    - records: список словарей
+    """
+    with zipfile.ZipFile(file_path, "r") as zip_file:
+        shared_strings = read_shared_strings(zip_file)
+        sheet_path = get_sheet_path(zip_file)
 
-#НОМЕР 10
-prev = input()
+        sheet_xml = ET.fromstring(zip_file.read(sheet_path))
 
-while True:
-    word = input()
-    if word[0] != prev[-1]:
-        print(word)
-        break
-    prev = word
+        all_rows = []
 
-#НОМЕР 11
-s = input()
+        for row in sheet_xml.findall(".//main:row", NAMESPACE):
+            row_data = {}
 
-for i, c in enumerate(s, start=1):
-    print(c * i, end="")
+            for cell in row.findall("main:c", NAMESPACE):
+                cell_ref = cell.attrib.get("r", "")
+                col_name = column_letters(cell_ref)
+                col_index = excel_column_to_index(col_name)
+                row_data[col_index] = cell_value(cell, shared_strings)
 
-#НОМЕР 12
-path = input()
+            all_rows.append(row_data)
 
-x = y = 0
-points = [(x, y)]
+    if not all_rows:
+        raise ValueError("Файл пустой или не удалось прочитать строки.")
 
-for c in path[1:]:
-    if c == ">":
-        x += 1
-    elif c == "<":
-        x -= 1
-    elif c == "V":
-        y += 1
-    points.append((x, y))
+    max_columns = max(max(row.keys(), default=-1) for row in all_rows) + 1
 
-min_x = min(p[0] for p in points)
+    normalized_rows = []
+    for row in all_rows:
+        normalized = []
+        for col_index in range(max_columns):
+            normalized.append(row.get(col_index, ""))
+        normalized_rows.append(normalized)
 
-points = [(x - min_x, y) for x, y in points]
+    headers = normalized_rows[0]
+    data_rows = normalized_rows[1:]
 
-max_x = max(p[0] for p in points)
-max_y = max(p[1] for p in points)
+    records = []
+    for row in data_rows:
+        record = {}
+        for i, header in enumerate(headers):
+            record[header] = row[i]
+        records.append(record)
 
-grid = [[" " for _ in range(max_x + 1)] for _ in range(max_y + 1)]
+    return headers, records
 
-for x, y in points:
-    grid[y][x] = path[0]
 
-for row in grid:
-    print("".join(row))
+def save_to_csv(headers, records, output_path):
+    """
+    Сохраняет данные в CSV.
+    """
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(records)
 
-#НОМЕР 13
-a = list(map(int, input().split()))
 
-for i in range(1, len(a)):
-    if a[i] > a[i-1]:
-        print(a[i], end=" ")
+def main():
+    input_file = "data.xlsx"
+    output_file = "data.csv"
 
-#НОМЕР 14
-a = list(map(int, input().split()))
+    headers, records = read_xlsx_as_table(input_file)
 
-for i in range(0, len(a)-1, 2):
-    a[i], a[i+1] = a[i+1], a[i]
+    print("Файл успешно прочитан.")
+    print(f"Количество признаков: {len(headers)}")
+    print(f"Количество записей: {len(records)}")
+    print("\nСтолбцы:")
+    for header in headers:
+        print(f"- {header}")
 
-print(*a)
+    print("\nПервые 3 записи:")
+    for record in records[:3]:
+        print(record)
 
-#НОМЕР 15
-data = input().split()
-indexes = list(map(int, data[:-1]))
-words = data[-1:]
+    save_to_csv(headers, records, output_file)
+    print(f"\nCSV-файл сохранен как: {output_file}")
 
-sentence = input().split()
 
-result = [sentence[i-1] for i in indexes]
-
-result[0] = result[0].capitalize()
-
-print(" ".join(result))
-
-#НОМЕР 16
-print(len(set(map(int, input().split()))))
-
-#НОМЕР 17
-print(len(set(map(int, input().split())) & set(map(int, input().split()))))
-
-#НОМЕР 18
-n = int(input())
-words = set()
-
-for _ in range(n):
-    words.update(input().split())
-
-print(len(words))
-
-#НОМЕР 19
-words = input().split()
-
-seen = {}
-
-for w in words:
-    print(seen.get(w, 0), end=" ")
-    seen[w] = seen.get(w, 0) + 1
-
-#НОМЕР 20
-n = int(input())
-
-d = {}
-
-for _ in range(n):
-    a, b = input().split()
-    d[a] = b
-    d[b] = a
-
-word = input()
-
-print(d[word])
-
-#НОМЕР 21
-n = int(input())
-
-votes = {}
-
-for _ in range(n):
-    name, v = input().split()
-    votes[name] = votes.get(name, 0) + int(v)
-
-for name in sorted(votes):
-    print(name, votes[name])
-
-#НОМЕР 22
-#1
-[x for x in my_list if x < 5]
-
-#2
-[x / 2 for x in my_list]
-
-#3
-[x * 2 for x in my_list if x > 17]
-
-#4
-n = int(input())
-squares = [i**2 for i in range(n+1)]
-
-#5
-nums = [int(x) for x in input().split()]
-print(*[x**2 for x in nums])
-
-#6
-print(*[x**2 for x in map(int, input().split()) if x % 2 and (x**2) % 10 != 9])
-
-#НОМЕР 23
-nums = list(map(int, input().split()))
-
-for n in nums:
-    print("*" * n)
-
-#НОМЕР 24
-def triangle(a, b, c):
-    if a + b > c and a + c > b and b + c > a:
-        print("Это треугольник")
-    else:
-        print("Это не треугольник")
-
-#НОМЕР 25
-def palindrome(s):
-    s = s.lower().replace(" ", "")
-    if s == s[::-1]:
-        return "Палиндром"
-    else:
-        return "Не палиндром"
+if __name__ == "__main__":
+    main()
