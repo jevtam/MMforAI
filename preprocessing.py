@@ -1,28 +1,43 @@
+def safe_int(value):
+    value = str(value).strip()
+    if value == "":
+        raise ValueError("Пустое числовое значение")
+    return int(float(value))
+
+
 def encode_record(record):
     x = [
-        int(record["Возраст"]),
+        safe_int(record["Возраст"]),
         1 if record["Пол"].strip().lower() == "мужской" else 0,
         1 if record["Состоит в браке"].strip().lower() == "да" else 0,
-        int(record["Иждивенцы"]),
-        int(record["Доход"]),
-        int(record["Опыт работы"]),
-        int(record["Срок проживания"]),
-        int(record["Недвижимость"]),
-        int(record["Месячный платеж"]),
+        safe_int(record["Иждивенцы"]),
+        safe_int(record["Доход"]),
+        safe_int(record["Опыт работы"]),
+        safe_int(record["Срок проживания"]),
+        safe_int(record["Недвижимость"]),
+        safe_int(record["Месячный платеж"]),
     ]
 
-    y = 1 if int(record["Число просрочек более 60 дн."]) > 0 else 0
+    y = 1 if safe_int(record["Число просрочек более 60 дн."]) > 0 else 0
     return x, y
 
 
 def build_dataset(records):
     x_data = []
     y_data = []
+    skipped = 0
 
-    for record in records:
-        x, y = encode_record(record)
-        x_data.append(x)
-        y_data.append(y)
+    for i, record in enumerate(records, start=1):
+        try:
+            x, y = encode_record(record)
+            x_data.append(x)
+            y_data.append(y)
+        except Exception:
+            skipped += 1
+            print(f"Пропущена строка {i}: некорректные или пустые данные")
+
+    print(f"\nКорректных строк: {len(x_data)}")
+    print(f"Пропущено строк: {skipped}")
 
     return x_data, y_data
 
