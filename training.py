@@ -3,7 +3,7 @@ from neuron import predict_linear
 
 def compute_error(x_data, y_data, weights, bias):
     """
-    Считает сумму квадратов ошибок:
+    сумма квадратов ошибок:
     E(φ, D) = sum((y - f(x, φ))^2)
     """
     total_error = 0.0
@@ -17,7 +17,7 @@ def compute_error(x_data, y_data, weights, bias):
 
 def train_linear_neuron(x_data, y_data, learning_rate=0.05, epochs=1000):
     """
-    Обучение одного нейрона методом градиентного спуска.
+    обучение одного нейрона методом градиентного спуска.
     """
     num_features = len(x_data[0])
 
