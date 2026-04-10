@@ -68,8 +68,8 @@ def main():
 
         print(
             f"Объект {i + 1}: "
-            f"raw = {raw_prediction:.6f}, "
-            f"class = {class_prediction}, "
+            f"raw (выход линейной функции нейрона) = {raw_prediction:.6f}, "
+            f"class (перево 0 или 1 через порог 0.5) = {class_prediction}, "
             f"true = {y[i]}"
         )
 
