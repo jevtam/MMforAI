@@ -1,77 +1,58 @@
-from excel_reader import read_xlsx_as_table
-from preprocessing import build_dataset, min_max_normalize
-from csv_utils import save_to_csv
-from training import train_linear_neuron
-from neuron import predict_linear, predict_class
+from data_loader import load_excel
+from preprocessing import prepare_data
+from neural_network import train_network, predict_raw, predict_class, accuracy
 
 
 def main():
-    input_file = r"C:\MMforAI\data.xlsx"
+    file_path = "data.xlsx"
+    # загрузка данных
+    df = load_excel(file_path)
 
-    headers, records = read_xlsx_as_table(input_file)
+    print("Файл успешно прочитан через pandas")
+    print(f"Количество строк: {len(df)}")
+    print(f"Количество столбцов: {len(df.columns)}")
+    
+    # подготовка данных
+    x_data, y_data, feature_columns = prepare_data(df)
 
-    print("Файл успешно прочитан.")
-    print(f"Количество исходных записей: {len(records)}")
-    print(f"Количество исходных признаков: {len(headers)}")
+    print("\nДанные подготовлены и нормализованы")
+    print(f"Количество объектов: {len(x_data)}")
+    print(f"Количество входных параметров: {len(feature_columns)}")
 
-    x_raw, y = build_dataset(records)
-    x_norm, mins, maxs = min_max_normalize(x_raw)
-
-    print("\nПервые 3 объекта до нормализации:")
-    for i in range(3):
-        print(x_raw[i], "->", y[i])
-
-    print("\nПервые 3 объекта после нормализации:")
-    for i in range(3):
-        print(x_norm[i], "->", y[i])
-
-    output_headers = [
-        "Возраст",
-        "Пол",
-        "Состоит в браке",
-        "Иждивенцы",
-        "Доход",
-        "Опыт работы",
-        "Срок проживания",
-        "Недвижимость",
-        "Месячный платеж",
-        "target",
-    ]
-
-    output_rows = []
-    for i in range(len(x_norm)):
-        output_rows.append(x_norm[i] + [y[i]])
-
-    save_to_csv(output_headers, output_rows, "data_normalized.csv")
-
-    print("\nНормализованный файл сохранён как data_normalized.csv")
-    print("\nМинимумы по признакам:", mins)
-    print("Максимумы по признакам:", maxs)
-
-    weights, bias = train_linear_neuron(
-        x_data=x_norm,
-        y_data=y,
+    # обучение нейросети
+    weights, bias = train_network(
+        x_data=x_data,
+        y_data=y_data,
         learning_rate=0.05,
-        epochs=1000
+        epochs=1000,
+        alpha=0.01,
+        regularization="l2"
     )
 
-    print("\nОбучение завершено.")
-    print("Веса нейрона:")
-    for i, w in enumerate(weights, start=1):
-        print(f"w{i} = {w:.6f}")
-    print(f"bias = {bias:.6f}")
+    print("\nОбучение завершено")
+    # вывод весов
+    print("\nВеса:")
+    for name, weight in zip(feature_columns, weights):
+        print(f"{name}: {weight:.6f}")
 
+    print(f"\nBias: {bias:.6f}")
+    # вывод первых предсказаний
     print("\nПервые 10 предсказаний:")
     for i in range(10):
-        raw_prediction = predict_linear(x_norm[i], weights, bias)
-        class_prediction = predict_class(x_norm[i], weights, bias)
+        raw = predict_raw(x_data[i], weights, bias)
+        predicted = predict_class(x_data[i], weights, bias)
+        true = y_data[i]
 
         print(
             f"Объект {i + 1}: "
-            f"raw (выход линейной функции нейрона) = {raw_prediction:.6f}, "
-            f"class (перево 0 или 1 через порог 0.5) = {class_prediction}, "
-            f"true = {y[i]}"
+            f"raw = {raw:.6f}, "
+            f"predicted = {predicted}, "
+            f"true = {true}"
         )
+
+    acc = accuracy(x_data, y_data, weights, bias)
+
+    print(f"\nПроцент правильности: {acc:.2f}%")
 
 
 if __name__ == "__main__":
